@@ -1,0 +1,10 @@
+---
+endpoint: "0.0.0.0:8858"
+ws_cfg:
+  ws_host: "127.0.0.1"
+  ws_port: "8855"
+  ws_sni: "test.com"
+  path: "/chat"
+  password: "123456789"
+threads: 10
+log_level: "debug" #trace, debug, info, warn, err, critical, off

@@ -1,0 +1,17 @@
+---
+endpoint: "0.0.0.0:8855"
+ssl:
+  crt: "tls.crt"
+  key: "tls.key"
+threads: 4
+auth:
+  path: "/chat"
+  passwords: ["123456789"]
+
+proxy_host: "127.0.0.1"
+proxy_port: "8080"
+forward_host: "127.0.0.1"
+forward_port: "5555"
+default_action: { href_url: "www.google.com" }
+
+log_level: "debug" #trace, debug, info, warn, err, critical, off
