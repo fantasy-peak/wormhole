@@ -240,9 +240,6 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		SPDLOG_ERROR("client disconnect!!!");
 		co_return;
 	}
-	std::unordered_map<std::string, std::string> http_headers;
-	for (auto& h : request.base())
-		http_headers.emplace(h.name_string(), h.value());
 	std::string path{request.target()};
 	if (!boost::beast::websocket::is_upgrade(request) || path != cfg.auth.path) {
 		SPDLOG_INFO("is_upgrade: [{}], path: [{}]", boost::beast::websocket::is_upgrade(request), path.data());
@@ -276,6 +273,9 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		SPDLOG_ERROR("[async_accept_ws]: {}", ec.message());
 		co_return;
 	}
+	std::unordered_map<std::string, std::string> http_headers;
+	for (auto& h : request.base())
+		http_headers.emplace(h.name_string(), h.value());
 	std::string is_self_client;
 	if (http_headers.contains("self-client"))
 		is_self_client = http_headers["self-client"];
