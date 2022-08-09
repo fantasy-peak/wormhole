@@ -252,6 +252,7 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 			auto& path = cfg.default_action.html_path.value();
 			if (std::filesystem::exists(path) && std::filesystem::is_regular_file(path)) {
 				std::ifstream file(path, std::ios::in | std::ios::binary);
+				res.result(boost::beast::http::status::ok);
 				res.body() = std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 			}
 			else {
@@ -268,7 +269,7 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 	auto ws_ptr = std::make_shared<SslWebsocketStream>(std::move(stream));
 	ws_ptr->set_option(boost::beast::websocket::stream_base::timeout::suggested(boost::beast::role_type::server));
 	ws_ptr->set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::response_type& res) {
-		res.set(boost::beast::http::field::server, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-server-async-ssl");
+		res.set(boost::beast::http::field::server, std::string(BOOST_BEAST_VERSION_STRING) + " wormhole-server");
 	}));
 	auto ec = co_await async_accept_ws(*ws_ptr, request);
 	if (ec) {

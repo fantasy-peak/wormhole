@@ -92,7 +92,7 @@ async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_c
 	boost::beast::get_lowest_layer(ws_).expires_never();
 	ws_.set_option(boost::beast::websocket::stream_base::timeout::suggested(boost::beast::role_type::client));
 	ws_.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::request_type& req) {
-		req.set(boost::beast::http::field::user_agent, std::string(BOOST_BEAST_VERSION_STRING) + " websocket-client-async-ssl");
+		req.set(boost::beast::http::field::user_agent, std::string(BOOST_BEAST_VERSION_STRING) + " wormhole-client");
 		req.set("self-client", "true");
 	}));
 	if (auto ec = co_await async_handshake(ws_, server_host, cfg.ws_cfg.path); ec) {
