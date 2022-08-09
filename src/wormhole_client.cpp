@@ -65,6 +65,11 @@ async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_c
 
 	boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv13_client};
 	SslWebsocketStream ws_{executor_ptr->m_io_context, ctx};
+	if (!SSL_set_tlsext_host_name(ws_.next_layer().native_handle(), cfg.ws_cfg.ws_sni.c_str())) {
+		boost::system::error_code ec = boost::beast::error_code(static_cast<int>(::ERR_get_error()), boost::beast::net::error::get_ssl_category());
+		SPDLOG_ERROR("SSL_set_tlsext_host_name error: {}", ec.message());
+		co_return nullptr;
+	}
 	boost::system::error_code ec;
 	boost::beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
 	auto [con_ec, ep] = co_await async_connect_ws(ws_, resolver_results);
@@ -78,14 +83,9 @@ async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_c
 	SPDLOG_DEBUG("set tcp keep_alive: [{}]", ec.message());
 
 	boost::beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
-	if (!SSL_set_tlsext_host_name(ws_.next_layer().native_handle(), cfg.ws_cfg.ws_sni.c_str())) {
-		boost::system::error_code ec = boost::beast::error_code(static_cast<int>(::ERR_get_error()), boost::beast::net::error::get_ssl_category());
-		SPDLOG_ERROR("SSL_set_tlsext_host_name error: {}", ec.message());
-		co_return nullptr;
-	}
 	auto server_host = fmt::format("{}:{}", cfg.ws_cfg.ws_host, std::to_string(ep.port()));
 	SPDLOG_DEBUG("server_host: {}", server_host);
-	if (auto ec = co_await async_ssl_handshake(ws_, boost::asio::ssl::stream_base::handshake_type::client); ec) {
+	if (auto ec = co_await async_ssl_handshake(ws_, boost::asio::ssl::stream_base::client); ec) {
 		SPDLOG_ERROR("async_ssl_handshake error: {}", ec.message());
 		co_return nullptr;
 	}

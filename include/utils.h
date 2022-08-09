@@ -129,12 +129,11 @@ public:
 	bool await_ready() { return false; }
 	auto await_resume() { return std::make_pair(m_ec, m_size); }
 	void await_suspend(std::coroutine_handle<> handle) {
-		m_socket.async_read_some(std::move(m_buffer),
-			[this, handle](auto ec, auto size) mutable {
-				m_ec = ec;
-				m_size = size;
-				handle.resume();
-			});
+		m_socket.async_read_some(m_buffer, [this, handle](auto ec, auto size) mutable {
+			m_ec = ec;
+			m_size = size;
+			handle.resume();
+		});
 	}
 	auto coAwait(async_simple::Executor* executor) noexcept {
 		return std::move(*this);
@@ -155,81 +154,6 @@ inline async_simple::coro::Lazy<std::pair<boost::system::error_code, size_t>> as
 }
 
 template <typename Socket, typename AsioBuffer>
-struct ReadAwaiter {
-public:
-	ReadAwaiter(Socket& socket, AsioBuffer&& buffer)
-		: m_socket(socket)
-		, m_buffer(std::move(buffer)) {
-	}
-
-	bool await_ready() { return false; }
-	auto await_resume() { return std::make_pair(m_ec, m_size); }
-	void await_suspend(std::coroutine_handle<> handle) {
-		boost::asio::async_read(m_socket, m_buffer,
-			[this, handle](auto ec, auto size) mutable {
-				m_ec = ec;
-				m_size = size;
-				handle.resume();
-			});
-	}
-	auto coAwait(async_simple::Executor* executor) noexcept {
-		return std::move(*this);
-	}
-
-private:
-	Socket& m_socket;
-	AsioBuffer m_buffer;
-
-	boost::system::error_code m_ec{};
-	size_t m_size{0};
-};
-
-template <typename Socket, typename AsioBuffer>
-inline async_simple::coro::Lazy<std::pair<boost::system::error_code, size_t>> async_read(Socket& socket, AsioBuffer&& buffer) noexcept {
-	static_assert(std::is_rvalue_reference<decltype(buffer)>::value, "async_read AsioBuffer is not rvalue");
-	co_return co_await ReadAwaiter{socket, std::move(buffer)};
-}
-
-template <typename Socket, typename AsioBuffer>
-struct ReadUntilAwaiter {
-public:
-	ReadUntilAwaiter(Socket& socket, AsioBuffer& buffer,
-		boost::asio::string_view delim)
-		: m_socket(socket)
-		, m_buffer(buffer)
-		, m_delim(delim) {
-	}
-
-	bool await_ready() { return false; }
-	auto await_resume() { return std::make_pair(m_ec, m_size); }
-	void await_suspend(std::coroutine_handle<> handle) {
-		boost::asio::async_read_until(m_socket, m_buffer, m_delim,
-			[this, handle](auto ec, auto size) mutable {
-				m_ec = ec;
-				m_size = size;
-				handle.resume();
-			});
-	}
-	auto coAwait(async_simple::Executor* executor) noexcept {
-		return std::move(*this);
-	}
-
-private:
-	Socket& m_socket;
-	AsioBuffer& m_buffer;
-	boost::asio::string_view m_delim;
-
-	boost::system::error_code m_ec{};
-	size_t m_size{0};
-};
-
-template <typename Socket, typename AsioBuffer>
-inline async_simple::coro::Lazy<std::pair<boost::system::error_code, size_t>> async_read_until(Socket& socket, AsioBuffer& buffer,
-	boost::asio::string_view delim) noexcept {
-	co_return co_await ReadUntilAwaiter{socket, buffer, delim};
-}
-
-template <typename Socket, typename AsioBuffer>
 struct WriteAwaiter {
 public:
 	WriteAwaiter(Socket& socket, AsioBuffer&& buffer)
@@ -246,7 +170,7 @@ public:
 			handle.resume();
 		};
 		if constexpr (std::is_same_v<AsioBuffer, boost::beast::http::response<boost::beast::http::string_body>>) {
-			boost::beast::http::async_write(m_socket, std::move(m_buffer), func);
+			boost::beast::http::async_write(m_socket, m_buffer, func);
 		}
 		else {
 			boost::asio::async_write(m_socket, std::move(m_buffer), func);
@@ -296,7 +220,7 @@ public:
 			if (*done)
 				return;
 			*done = true;
-			m_ec = std::move(ec);
+			m_ec = ec;
 			handle.resume();
 		});
 	}
@@ -329,7 +253,7 @@ public:
 	void await_suspend(std::coroutine_handle<> handle) {
 		boost::beast::get_lowest_layer(m_ws).async_connect(m_results_type,
 			[this, handle](boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type::endpoint_type ep) {
-				m_ec = std::move(ec);
+				m_ec = ec;
 				m_ep = std::move(ep);
 				handle.resume();
 			});
@@ -360,7 +284,7 @@ public:
 	bool await_ready() const noexcept { return false; }
 	void await_suspend(std::coroutine_handle<> handle) {
 		m_ws.next_layer().async_handshake(m_handshake_type, [this, handle](boost::beast::error_code ec) {
-			m_ec = std::move(ec);
+			m_ec = ec;
 			handle.resume();
 		});
 	}
@@ -389,7 +313,7 @@ public:
 	bool await_ready() const noexcept { return false; }
 	void await_suspend(std::coroutine_handle<> handle) {
 		m_ws.async_handshake(m_host, m_target, [this, handle](boost::beast::error_code ec) {
-			m_ec = std::move(ec);
+			m_ec = ec;
 			handle.resume();
 		});
 	}
@@ -420,11 +344,11 @@ public:
 		m_resolver.async_resolve(m_server_host.c_str(), m_server_port.c_str(),
 			[this, handle](boost::system::error_code ec, boost::asio::ip::tcp::resolver::results_type results) {
 				m_results_type = std::move(results);
-				m_ec = std::move(ec);
+				m_ec = ec;
 				handle.resume();
 			});
 	}
-	auto await_resume() noexcept { return std::make_tuple(std::move(m_ec), std::move(m_results_type)); }
+	auto await_resume() noexcept { return std::make_tuple(m_ec, std::move(m_results_type)); }
 
 private:
 	boost::asio::ip::tcp::resolver& m_resolver;
@@ -451,7 +375,7 @@ public:
 	auto await_resume() { return std::make_pair(m_ec, m_size); }
 	void await_suspend(std::coroutine_handle<> handle) {
 		m_socket.async_write(m_buffer, [this, handle](boost::beast::error_code ec, std::size_t size) {
-			m_ec = std::move(ec);
+			m_ec = ec;
 			m_size = size;
 			handle.resume();
 		});
@@ -483,7 +407,7 @@ public:
 	auto await_resume() { return std::make_pair(m_ec, m_size); }
 	void await_suspend(std::coroutine_handle<> handle) {
 		m_socket.async_read(m_buffer, [this, handle](auto ec, auto size) mutable {
-			m_ec = std::move(ec);
+			m_ec = ec;
 			m_size = size;
 			handle.resume();
 		});
@@ -540,7 +464,7 @@ public:
 	bool await_ready() const noexcept { return false; }
 	void await_suspend(std::coroutine_handle<> handle) {
 		m_ws_stream.async_accept(m_req, [this, handle](boost::beast::error_code ec) {
-			m_ec = std::move(ec);
+			m_ec = ec;
 			handle.resume();
 		});
 	}
@@ -572,7 +496,7 @@ public:
 	auto await_resume() { return std::make_pair(m_ec, m_size); }
 	void await_suspend(std::coroutine_handle<> handle) {
 		boost::beast::http::async_read(m_socket, m_buffer, m_parser, [this, handle](boost::beast::error_code ec, std::size_t bytes_transferred) {
-			m_ec = std::move(ec);
+			m_ec = ec;
 			m_size = bytes_transferred;
 			handle.resume();
 		});
