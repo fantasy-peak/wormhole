@@ -77,7 +77,8 @@ inline std::tuple<std::string, std::string> split(const std::string& endpoint) {
 class AsioExecutor : public async_simple::Executor {
 public:
 	AsioExecutor(boost::asio::io_context& io_context)
-		: m_io_context(io_context) {}
+		: m_io_context(io_context) {
+	}
 
 	virtual bool schedule(Func func) override {
 		boost::asio::post(m_io_context, std::move(func));
@@ -456,9 +457,9 @@ template <typename Body, typename Allocator>
 class AcceptorAwaiterWs {
 public:
 	AcceptorAwaiterWs(boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>& stream,
-		boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req)
+		boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>>& req)
 		: m_ws_stream(stream)
-		, m_req(std::move(req)) {
+		, m_req(req) {
 	}
 
 	bool await_ready() const noexcept { return false; }
@@ -472,15 +473,15 @@ public:
 
 private:
 	boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>& m_ws_stream;
-	boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> m_req;
+	boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>>& m_req;
 	boost::beast::error_code m_ec{};
 };
 
 template <typename Body, typename Allocator>
 inline async_simple::coro::Lazy<boost::beast::error_code> async_accept_ws(
 	boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>& ws_stream,
-	boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>> req) noexcept {
-	co_return co_await AcceptorAwaiterWs{ws_stream, std::move(req)};
+	boost::beast::http::request<Body, boost::beast::http::basic_fields<Allocator>>& req) noexcept {
+	co_return co_await AcceptorAwaiterWs{ws_stream, req};
 }
 
 template <typename Socket, typename AsioBuffer, typename Parser>

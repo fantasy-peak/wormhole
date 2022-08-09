@@ -178,8 +178,8 @@ async_simple::coro::Lazy<void> start_exchange(R r_ptr, W w_ptr, std::shared_ptr<
 	co_return;
 }
 
-async_simple::coro::Lazy<void> forward_request_to_ws_svr(std::shared_ptr<SslWebsocketStream> ws_ptr, std::shared_ptr<AsioExecutor> ex,
-	boost::beast::http::request<boost::beast::http::string_body> request, Config& cfg, std::unordered_map<std::string, std::string> http_headers) {
+async_simple::coro::Lazy<void> forward_request_to_ws_svr(std::shared_ptr<SslWebsocketStream> ws_ptr,
+	std::shared_ptr<AsioExecutor> ex, Config& cfg, std::unordered_map<std::string, std::string> http_headers) {
 	boost::asio::ip::tcp::resolver resolver{ex->m_io_context};
 	SPDLOG_DEBUG("cfg.forward_host: [{}], cfg.forward_port: [{}]", cfg.forward_host, cfg.forward_port);
 	auto [resolver_ec, resolver_results] = co_await async_resolve(resolver, cfg.forward_host, cfg.forward_port);
@@ -280,7 +280,7 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		is_self_client = http_headers["self-client"];
 	if (is_self_client != "true") {
 		SPDLOG_DEBUG("start call forward_request_to_ws_svr");
-		co_await forward_request_to_ws_svr(std::move(ws_ptr), std::move(ex), std::move(request), cfg, std::move(http_headers));
+		co_await forward_request_to_ws_svr(std::move(ws_ptr), std::move(ex), cfg, std::move(http_headers));
 		co_return;
 	}
 
@@ -289,7 +289,7 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
 		co_return;
 	}
-	std::string request_auth_pwd(boost::asio::buffers_begin(buffer_.data()), boost::asio::buffers_end(buffer_.data()));
+	std::string request_auth_pwd = boost::beast::buffers_to_string(buffer_.data());
 	if (cfg.auth.passwords.find(request_auth_pwd) == cfg.auth.passwords.end()) {
 		SPDLOG_ERROR("[start_session] auth fail: {}", request_auth_pwd);
 		co_await close(ws_ptr);

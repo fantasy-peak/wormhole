@@ -163,7 +163,7 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<boost::asio::ip::tc
 			SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
 		co_return;
 	}
-	std::string auth_result(boost::asio::buffers_begin(buffer_.data()), boost::asio::buffers_end(buffer_.data()));
+	std::string auth_result = boost::beast::buffers_to_string(buffer_.data());
 	if (auth_result != "OK") {
 		SPDLOG_ERROR("[start_session] auth fail");
 		co_return;
