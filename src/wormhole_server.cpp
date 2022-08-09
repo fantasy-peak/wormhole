@@ -69,8 +69,7 @@ async_simple::coro::Lazy<> close(Args... args) {
 				// boost::system::error_code ec;
 				// boost::beast::get_lowest_layer(*sock_ptr).socket().cancel(ec);
 				// boost::beast::get_lowest_layer(*sock_ptr).socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-				if (auto ec = co_await async_close_ws(*sock_ptr); ec)
-					SPDLOG_ERROR("close websocket error: [{}]", ec.message());
+				co_await async_close_ws(*sock_ptr);
 			}
 		}
 		else if (std::is_same_v<std::decay_t<decltype(sock_ptr)>, std::shared_ptr<boost::asio::ip::tcp::socket>>) {
@@ -79,8 +78,6 @@ async_simple::coro::Lazy<> close(Args... args) {
 				sock_ptr->cancel(ec);
 				sock_ptr->shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
 				sock_ptr->close(ec);
-				if (ec)
-					SPDLOG_ERROR("close socket error: [{}]", ec.message());
 			}
 		}
 		else {
@@ -94,7 +91,7 @@ async_simple::coro::Lazy<> close(Args... args) {
 
 async_simple::coro::Lazy<void> forward_proxy_to_ws(std::shared_ptr<SslWebsocketStream> ws_ptr,
 	std::shared_ptr<boost::asio::ip::tcp::socket> socket_ptr, std::shared_ptr<AsioExecutor> ex) {
-	constexpr int32_t BufferLen{8192};
+	constexpr int32_t BufferLen{1024 * 20};
 	std::unique_ptr<uint8_t[]> buffer_ptr = std::make_unique<uint8_t[]>(BufferLen);
 	ws_ptr->binary(true);
 	while (true) {
@@ -116,8 +113,9 @@ async_simple::coro::Lazy<void> forward_proxy_to_ws(std::shared_ptr<SslWebsocketS
 
 async_simple::coro::Lazy<void> forward_ws_to_proxy(std::shared_ptr<SslWebsocketStream> ws_ptr,
 	std::shared_ptr<boost::asio::ip::tcp::socket> socket_ptr, std::shared_ptr<AsioExecutor> ex) {
+	boost::beast::flat_buffer buffer_;
 	while (true) {
-		boost::beast::flat_buffer buffer_;
+		buffer_.consume(buffer_.size());
 		auto [ec, count] = co_await async_read_ws(*ws_ptr, buffer_);
 		if (ec == boost::beast::websocket::error::closed) {
 			SPDLOG_DEBUG("boost::beast::websocket::error::closed!!!");
@@ -130,7 +128,7 @@ async_simple::coro::Lazy<void> forward_ws_to_proxy(std::shared_ptr<SslWebsocketS
 			co_await close(ws_ptr, socket_ptr);
 			co_return;
 		}
-		if (auto [ec, _] = co_await async_write(*socket_ptr, std::move(buffer_)); ec) {
+		if (auto [ec, _] = co_await async_write(*socket_ptr, boost::asio::buffer(buffer_.data(), buffer_.size())); ec) {
 			co_await close(ws_ptr, socket_ptr);
 			SPDLOG_DEBUG("[forward_ws_to_proxy] async_write: [{}]", ec.message());
 			co_return;
@@ -148,7 +146,7 @@ async_simple::coro::Lazy<std::shared_ptr<boost::asio::ip::tcp::socket>> create_p
 		co_return nullptr;
 	}
 	SPDLOG_DEBUG("async_connect: [{}:{}]", proxy_host, proxy_port);
-	if (auto ec = co_await async_connect(context, *socket_ptr, resolver_results, 5000); ec) {
+	if (auto [ec, ep] = co_await async_connect(context, *socket_ptr, resolver_results, 5000); ec) {
 		SPDLOG_ERROR("async_connect: {}, host: [{}] port: [{}]", ec.message(), proxy_host, proxy_port);
 		co_return nullptr;
 	}
@@ -192,7 +190,7 @@ async_simple::coro::Lazy<void> forward_request_to_ws_svr(std::shared_ptr<SslWebs
 	WebsocketStream ws_{ex->m_io_context};
 	boost::system::error_code ec;
 	boost::beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
-	auto [con_ec, ep] = co_await async_connect_ws(ws_, resolver_results);
+	auto [con_ec, ep] = co_await async_connect(ex->m_io_context, ws_, resolver_results);
 	if (con_ec) {
 		SPDLOG_ERROR("async_connect_ws: [{}]", con_ec.message());
 		co_await close(ws_ptr);
@@ -215,8 +213,8 @@ async_simple::coro::Lazy<void> forward_request_to_ws_svr(std::shared_ptr<SslWebs
 	}));
 	auto server_host = fmt::format("{}:{}", cfg.forward_host, std::to_string(ep.port()));
 	SPDLOG_DEBUG("server_host: {}, path: {}", server_host, cfg.auth.path);
-	if (auto ec = co_await async_handshake(ws_, server_host, cfg.auth.path); ec) {
-		SPDLOG_ERROR("websocket async_handshake error: {}", ec.message());
+	if (auto ec = co_await async_ws_handshake(ws_, server_host, cfg.auth.path); ec) {
+		SPDLOG_ERROR("websocket async_ws_handshake error: {}", ec.message());
 		co_await close(ws_ptr);
 		co_return;
 	}
@@ -229,7 +227,7 @@ async_simple::coro::Lazy<void> forward_request_to_ws_svr(std::shared_ptr<SslWebs
 async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, std::shared_ptr<boost::asio::ip::tcp::socket> sock,
 	boost::asio::ssl::context& ctx, Config& cfg) {
 	boost::beast::ssl_stream<boost::beast::tcp_stream> stream{std::move(*sock), ctx};
-	if (auto ec = co_await async_handshake_server(stream); ec) {
+	if (auto ec = co_await async_ssl_handshake(stream, boost::asio::ssl::stream_base::server); ec) {
 		SPDLOG_ERROR("async_handshake_server error: {}", ec.message());
 		co_return;
 	}
@@ -242,7 +240,9 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 	}
 	std::string path{request.target()};
 	if (!boost::beast::websocket::is_upgrade(request) || path != cfg.auth.path) {
-		SPDLOG_INFO("is_upgrade: [{}], path: [{}]", boost::beast::websocket::is_upgrade(request), path.data());
+		std::stringstream ss;
+		ss << boost::beast::get_lowest_layer(stream).socket().remote_endpoint();
+		SPDLOG_INFO("remote_endpoint: [{}], is_upgrade: [{}], path: [{}]", ss.str(), boost::beast::websocket::is_upgrade(request), path.data());
 		boost::beast::http::response<boost::beast::http::string_body> res{boost::beast::http::status::moved_permanently, request.version()};
 		res.set(boost::beast::http::field::server, BOOST_BEAST_VERSION_STRING);
 		if (cfg.default_action.html_path) {
@@ -284,7 +284,6 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		co_await forward_request_to_ws_svr(std::move(ws_ptr), std::move(ex), cfg, std::move(http_headers));
 		co_return;
 	}
-
 	buffer_.consume(buffer_.size());
 	if (auto [ec, count] = co_await async_read_ws(*ws_ptr, buffer_); ec) {
 		SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
