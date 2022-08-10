@@ -46,7 +46,7 @@ async_simple::coro::Lazy<> close(std::shared_ptr<SslWebsocketStream>& stream, st
 	co_return;
 }
 
-async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_client(std::shared_ptr<AsioExecutor> executor_ptr, Config& cfg) {
+async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_client(const std::shared_ptr<AsioExecutor>& executor_ptr, Config& cfg) {
 	boost::asio::ip::tcp::resolver resolver{executor_ptr->m_io_context};
 	auto [resolver_ec, resolver_results] = co_await async_resolve(resolver, cfg.ws_cfg.ws_host, cfg.ws_cfg.ws_port);
 	if (resolver_ec) {
@@ -85,9 +85,10 @@ async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_c
 	}
 	SslWebsocketStream ws_{std::move(stream)};
 	ws_.set_option(boost::beast::websocket::stream_base::timeout::suggested(boost::beast::role_type::client));
-	ws_.set_option(boost::beast::websocket::stream_base::decorator([](boost::beast::websocket::request_type& req) {
+	ws_.set_option(boost::beast::websocket::stream_base::decorator([&](boost::beast::websocket::request_type& req) {
 		req.set(boost::beast::http::field::user_agent, std::string(BOOST_BEAST_VERSION_STRING) + " wormhole-client");
 		req.set("self-client", "true");
+		req.set("password", cfg.ws_cfg.password);
 	}));
 	auto server_host = fmt::format("{}:{}", cfg.ws_cfg.ws_sni, cfg.ws_cfg.ws_port);
 	SPDLOG_DEBUG("server_host: {}", server_host);
@@ -99,7 +100,7 @@ async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_c
 }
 
 async_simple::coro::Lazy<void> forward_cli_to_ws(std::shared_ptr<SslWebsocketStream> ws_ptr,
-	std::shared_ptr<boost::asio::ip::tcp::socket> sock_ptr, std::shared_ptr<AsioExecutor> ex) {
+	std::shared_ptr<boost::asio::ip::tcp::socket> sock_ptr, [[maybe_unused]] std::shared_ptr<AsioExecutor> ex) {
 	constexpr int32_t BufferLen{1024 * 20};
 	std::unique_ptr<uint8_t[]> buffer_ptr = std::make_unique<uint8_t[]>(BufferLen);
 	ws_ptr->binary(true);
@@ -119,7 +120,7 @@ async_simple::coro::Lazy<void> forward_cli_to_ws(std::shared_ptr<SslWebsocketStr
 };
 
 async_simple::coro::Lazy<void> forward_ws_to_cli(std::shared_ptr<SslWebsocketStream> ws_ptr,
-	std::shared_ptr<boost::asio::ip::tcp::socket> sock_ptr, std::shared_ptr<AsioExecutor> ex) {
+	std::shared_ptr<boost::asio::ip::tcp::socket> sock_ptr, [[maybe_unused]] std::shared_ptr<AsioExecutor> ex) {
 	boost::beast::flat_buffer buffer_;
 	while (true) {
 		buffer_.consume(buffer_.size());
@@ -145,15 +146,9 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<boost::asio::ip::tc
 		SPDLOG_ERROR("create_websocket_client error");
 		co_return;
 	}
-	ws_ptr->text(true);
-	if (auto [ec, count] = co_await async_write_ws(*ws_ptr, boost::asio::buffer(cfg.ws_cfg.password.c_str(), cfg.ws_cfg.password.size())); ec) {
-		co_await close(ws_ptr, sock_ptr);
-		if (ec != boost::asio::error::operation_aborted)
-			SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
-		co_return;
-	}
-	forward_cli_to_ws(ws_ptr, sock_ptr, executor_ptr).via(executor_ptr.get()).detach();
-	forward_ws_to_cli(ws_ptr, sock_ptr, executor_ptr).via(executor_ptr.get()).detach();
+	auto ex_ptr = executor_ptr.get();
+	forward_cli_to_ws(ws_ptr, sock_ptr, executor_ptr).via(ex_ptr).detach();
+	forward_ws_to_cli(std::move(ws_ptr), std::move(sock_ptr), std::move(executor_ptr)).via(ex_ptr).detach();
 	co_return;
 }
 

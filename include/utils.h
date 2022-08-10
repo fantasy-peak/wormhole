@@ -104,7 +104,7 @@ public:
 		});
 	}
 	auto await_resume() noexcept { return m_ec; }
-	auto coAwait(async_simple::Executor* executor) noexcept {
+	auto coAwait(async_simple::Executor*) noexcept {
 		return std::move(*this);
 	}
 
@@ -136,7 +136,7 @@ public:
 			handle.resume();
 		});
 	}
-	auto coAwait(async_simple::Executor* executor) noexcept {
+	auto coAwait(async_simple::Executor*) noexcept {
 		return std::move(*this);
 	}
 
@@ -177,7 +177,7 @@ public:
 			boost::asio::async_write(m_socket, std::move(m_buffer), func);
 		}
 	}
-	auto coAwait(async_simple::Executor* executor) noexcept {
+	auto coAwait(async_simple::Executor*) noexcept {
 		return std::move(*this);
 	}
 
@@ -212,7 +212,7 @@ public:
 		if constexpr (std::is_same_v<SocketStream, boost::asio::ip::tcp::socket>) {
 			auto done = std::make_shared<bool>(false);
 			m_steady_timer.expires_after(std::chrono::milliseconds(m_timeout));
-			m_steady_timer.async_wait([this, handle, done](const boost::system::error_code& ec) {
+			m_steady_timer.async_wait([this, handle, done](const boost::system::error_code&) {
 				if (*done)
 					return;
 				*done = true;

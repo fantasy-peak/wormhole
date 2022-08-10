@@ -90,7 +90,7 @@ async_simple::coro::Lazy<> close(Args... args) {
 }
 
 async_simple::coro::Lazy<void> forward_proxy_to_ws(std::shared_ptr<SslWebsocketStream> ws_ptr,
-	std::shared_ptr<boost::asio::ip::tcp::socket> socket_ptr, std::shared_ptr<AsioExecutor> ex) {
+	std::shared_ptr<boost::asio::ip::tcp::socket> socket_ptr, [[maybe_unused]] std::shared_ptr<AsioExecutor> ex) {
 	constexpr int32_t BufferLen{1024 * 20};
 	std::unique_ptr<uint8_t[]> buffer_ptr = std::make_unique<uint8_t[]>(BufferLen);
 	ws_ptr->binary(true);
@@ -112,7 +112,7 @@ async_simple::coro::Lazy<void> forward_proxy_to_ws(std::shared_ptr<SslWebsocketS
 }
 
 async_simple::coro::Lazy<void> forward_ws_to_proxy(std::shared_ptr<SslWebsocketStream> ws_ptr,
-	std::shared_ptr<boost::asio::ip::tcp::socket> socket_ptr, std::shared_ptr<AsioExecutor> ex) {
+	std::shared_ptr<boost::asio::ip::tcp::socket> socket_ptr, [[maybe_unused]] std::shared_ptr<AsioExecutor> ex) {
 	boost::beast::flat_buffer buffer_;
 	while (true) {
 		buffer_.consume(buffer_.size());
@@ -155,7 +155,7 @@ async_simple::coro::Lazy<std::shared_ptr<boost::asio::ip::tcp::socket>> create_p
 }
 
 template <typename R, typename W>
-async_simple::coro::Lazy<void> start_exchange(R r_ptr, W w_ptr, std::shared_ptr<AsioExecutor> ex) {
+async_simple::coro::Lazy<void> start_exchange(R r_ptr, W w_ptr, [[maybe_unused]] std::shared_ptr<AsioExecutor> ex) {
 	boost::beast::flat_buffer buffer_;
 	while (true) {
 		buffer_.consume(buffer_.size());
@@ -219,8 +219,9 @@ async_simple::coro::Lazy<void> forward_request_to_ws_svr(std::shared_ptr<SslWebs
 		co_return;
 	}
 	auto forward_ws_ptr = std::make_shared<boost::beast::websocket::stream<boost::beast::tcp_stream>>(std::move(ws_));
-	start_exchange(ws_ptr, forward_ws_ptr, ex).via(ex.get()).detach();
-	start_exchange(forward_ws_ptr, ws_ptr, ex).via(ex.get()).detach();
+	auto ex_ptr = ex.get();
+	start_exchange(ws_ptr, forward_ws_ptr, ex).via(ex_ptr).detach();
+	start_exchange(std::move(forward_ws_ptr), std::move(ws_ptr), std::move(ex)).via(ex_ptr).detach();
 	co_return;
 }
 
@@ -276,7 +277,7 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 	std::unordered_map<std::string, std::string> http_headers;
 	for (auto& h : request.base())
 		http_headers.emplace(h.name_string(), h.value());
-	std::string is_self_client;
+	std::string is_self_client, request_auth_pwd;
 	if (http_headers.contains("self-client"))
 		is_self_client = http_headers["self-client"];
 	if (is_self_client != "true") {
@@ -284,12 +285,8 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		co_await forward_request_to_ws_svr(std::move(ws_ptr), std::move(ex), cfg, std::move(http_headers));
 		co_return;
 	}
-	buffer_.consume(buffer_.size());
-	if (auto [ec, count] = co_await async_read_ws(*ws_ptr, buffer_); ec) {
-		SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
-		co_return;
-	}
-	std::string request_auth_pwd = boost::beast::buffers_to_string(buffer_.data());
+	if (http_headers.contains("password"))
+		request_auth_pwd = http_headers["password"];
 	if (cfg.auth.passwords.find(request_auth_pwd) == cfg.auth.passwords.end()) {
 		SPDLOG_ERROR("[start_session] auth fail: {}", request_auth_pwd);
 		co_await close(ws_ptr);
@@ -301,8 +298,9 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		co_await close(ws_ptr);
 		co_return;
 	}
-	forward_proxy_to_ws(ws_ptr, socket_ptr, ex).via(ex.get()).detach();
-	forward_ws_to_proxy(ws_ptr, socket_ptr, ex).via(ex.get()).detach();
+	auto ex_ptr = ex.get();
+	forward_proxy_to_ws(ws_ptr, socket_ptr, ex).via(ex_ptr).detach();
+	forward_ws_to_proxy(std::move(ws_ptr), std::move(socket_ptr), std::move(ex)).via(ex_ptr).detach();
 	co_return;
 }
 

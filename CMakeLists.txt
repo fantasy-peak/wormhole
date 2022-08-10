@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.23.0)
 project(wormhole)
 
 set(CMAKE_CXX_STANDARD 20)
-set(OPTFLAGS -gdwarf-2)
+set(OPTFLAGS -gdwarf-2 -O3)
 set(CMAKE_CXX_FLAGS "-fcoroutines")
-set(WARNINGS -Wall -Wno-missing-field-initializers -Wno-ignored-qualifiers)
+set(WARNINGS -Wall -Wextra -Wno-missing-field-initializers -Wno-ignored-qualifiers)
 add_compile_options(${OPTFLAGS} ${WARNINGS})
 
 if(NOT EXISTS "${CMAKE_BINARY_DIR}/xrepo.cmake")
