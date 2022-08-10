@@ -152,18 +152,6 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<boost::asio::ip::tc
 			SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
 		co_return;
 	}
-	boost::beast::flat_buffer buffer_;
-	if (auto [ec, count] = co_await async_read_ws(*ws_ptr, buffer_); ec) {
-		co_await close(ws_ptr, sock_ptr);
-		if (ec != boost::asio::error::operation_aborted)
-			SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
-		co_return;
-	}
-	std::string auth_result = boost::beast::buffers_to_string(buffer_.data());
-	if (auth_result != "OK") {
-		SPDLOG_ERROR("[start_session] auth fail");
-		co_return;
-	}
 	forward_cli_to_ws(ws_ptr, sock_ptr, executor_ptr).via(executor_ptr.get()).detach();
 	forward_ws_to_cli(ws_ptr, sock_ptr, executor_ptr).via(executor_ptr.get()).detach();
 	co_return;

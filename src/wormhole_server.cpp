@@ -295,10 +295,6 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 		co_await close(ws_ptr);
 		co_return;
 	}
-	if (auto [ec, count] = co_await async_write_ws(*ws_ptr, boost::asio::buffer("OK", 2)); ec) {
-		SPDLOG_ERROR("[start_session] async_read_ws: {}", ec.message());
-		co_return;
-	}
 	SPDLOG_DEBUG("self auth ok: [{}]", cfg.auth.path);
 	auto socket_ptr = co_await create_proxy_socket(ex->m_io_context, cfg.proxy_host, cfg.proxy_port);
 	if (socket_ptr == nullptr) {
