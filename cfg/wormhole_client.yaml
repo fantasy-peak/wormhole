@@ -8,3 +8,8 @@ ws_cfg:
   password: "123456789"
 threads: 10
 log_level: "debug" #trace, debug, info, warn, err, critical, off
+tcp:
+  no_delay: false
+  keep_alive: true
+  fastopen: true
+  qlen: 50

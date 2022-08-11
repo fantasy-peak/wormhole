@@ -10,6 +10,14 @@
 
 #include "utils.h"
 
+struct Tcp {
+	bool no_delay;
+	bool keep_alive;
+	bool fastopen;
+	uint32_t qlen;
+};
+YCS_ADD_STRUCT(Tcp, no_delay, keep_alive, fastopen, qlen)
+
 struct WsConfig {
 	std::string ws_host;
 	std::string ws_port;
@@ -25,8 +33,9 @@ struct Config {
 	WsConfig ws_cfg;
 	std::optional<std::string> log_level;
 	std::optional<std::string> log_file;
+	Tcp tcp;
 };
-YCS_ADD_STRUCT(Config, endpoint, threads, ws_cfg, log_level, log_file)
+YCS_ADD_STRUCT(Config, endpoint, threads, ws_cfg, log_level, log_file, tcp)
 
 using SslWebsocketStream = boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>;
 
@@ -46,7 +55,8 @@ async_simple::coro::Lazy<> close(std::shared_ptr<SslWebsocketStream>& stream, st
 	co_return;
 }
 
-async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_client(const std::shared_ptr<AsioExecutor>& executor_ptr, Config& cfg) {
+async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_client(const std::shared_ptr<AsioExecutor>& executor_ptr,
+	Config& cfg, boost::asio::ssl::context& ctx) {
 	boost::asio::ip::tcp::resolver resolver{executor_ptr->m_io_context};
 	auto [resolver_ec, resolver_results] = co_await async_resolve(resolver, cfg.ws_cfg.ws_host, cfg.ws_cfg.ws_port);
 	if (resolver_ec) {
@@ -59,25 +69,42 @@ async_simple::coro::Lazy<std::shared_ptr<SslWebsocketStream>> create_websocket_c
 		ss << endpoint.endpoint();
 		SPDLOG_DEBUG("resolver_results: [{}]", ss.str());
 	}
-
-	boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv13_client};
 	boost::beast::ssl_stream<boost::beast::tcp_stream> stream{executor_ptr->m_io_context, ctx};
 	if (!SSL_set_tlsext_host_name(stream.native_handle(), cfg.ws_cfg.ws_sni.c_str())) {
 		boost::system::error_code ec{static_cast<int>(::ERR_get_error()), boost::asio::error::get_ssl_category()};
 		SPDLOG_ERROR("SSL_set_tlsext_host_name error: {}", ec.message());
 		co_return nullptr;
 	}
+
+	boost::system::error_code ec;
+	boost::beast::get_lowest_layer(stream).socket().open(resolver_results->endpoint().protocol(), ec);
+	if (ec) {
+		SPDLOG_ERROR("open error: {}", ec.message());
+		co_return nullptr;
+	}
+	if (cfg.tcp.no_delay) {
+		boost::beast::get_lowest_layer(stream).socket().set_option(boost::asio::ip::tcp::no_delay(true), ec);
+		SPDLOG_DEBUG("set tcp no_delay: [{}]", ec.message());
+	}
+	if (cfg.tcp.keep_alive) {
+		boost::beast::get_lowest_layer(stream).socket().set_option(boost::asio::socket_base::keep_alive(true), ec);
+		SPDLOG_DEBUG("set tcp keep_alive: [{}]", ec.message());
+	}
+	if (cfg.tcp.fastopen) {
+		if (0 == setsockopt(boost::beast::get_lowest_layer(stream).socket().native_handle(), SOL_TCP, TCP_FASTOPEN, &cfg.tcp.qlen, sizeof(cfg.tcp.qlen))) {
+			SPDLOG_DEBUG("TCP_FASTOPEN set success.");
+		}
+		else {
+			SPDLOG_ERROR("TCP_FASTOPEN set failed.");
+		}
+	}
+
 	boost::beast::get_lowest_layer(stream).expires_after(std::chrono::seconds(30));
 	if (auto [ec, ep] = co_await async_connect(executor_ptr->m_io_context, stream, resolver_results); ec) {
 		SPDLOG_DEBUG("async_connect_ssl: [{}]", ec.message());
 		co_return nullptr;
 	}
 	boost::beast::get_lowest_layer(stream).expires_never();
-	boost::system::error_code ec;
-	boost::beast::get_lowest_layer(stream).socket().set_option(boost::asio::ip::tcp::no_delay(true), ec);
-	SPDLOG_DEBUG("set tcp no_delay: [{}]", ec.message());
-	boost::beast::get_lowest_layer(stream).socket().set_option(boost::asio::socket_base::keep_alive(true), ec);
-	SPDLOG_DEBUG("set tcp keep_alive: [{}]", ec.message());
 
 	if (auto ec = co_await async_ssl_handshake(stream, boost::asio::ssl::stream_base::client); ec) {
 		SPDLOG_ERROR("async_ssl_handshake error: {}", ec.message());
@@ -140,8 +167,8 @@ async_simple::coro::Lazy<void> forward_ws_to_cli(std::shared_ptr<SslWebsocketStr
 };
 
 async_simple::coro::Lazy<void> start_session(std::shared_ptr<boost::asio::ip::tcp::socket> sock_ptr,
-	std::shared_ptr<AsioExecutor> executor_ptr, Config& cfg) {
-	auto ws_ptr = co_await create_websocket_client(executor_ptr, cfg);
+	std::shared_ptr<AsioExecutor> executor_ptr, Config& cfg, boost::asio::ssl::context& ctx) {
+	auto ws_ptr = co_await create_websocket_client(executor_ptr, cfg, ctx);
 	if (!ws_ptr) {
 		SPDLOG_ERROR("create_websocket_client error");
 		co_return;
@@ -194,9 +221,13 @@ int main(int argc, char** argv) {
 	auto [host, port] = split(cfg.value().endpoint);
 	boost::asio::ip::tcp::endpoint endpoint = *resolver.resolve(host, port).begin();
 	acceptor.open(endpoint.protocol());
+	boost::system::error_code ec;
+	if (cfg.value().tcp.fastopen) {
+		acceptor.set_option(boost::asio::detail::socket_option::integer<IPPROTO_TCP, TCP_FASTOPEN>(50), ec);
+		SPDLOG_INFO("client start fastopen: {}", ec.message());
+	}
 	acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 	acceptor.bind(endpoint);
-	boost::system::error_code ec;
 	acceptor.listen(boost::asio::socket_base::max_listen_connections, ec);
 	if (ec) {
 		SPDLOG_ERROR("{}", ec.message());
@@ -207,6 +238,9 @@ int main(int argc, char** argv) {
 	SPDLOG_INFO("start accept at {} ...", ss.str());
 	boost::asio::signal_set sigset(context, SIGINT, SIGTERM);
 	sigset.async_wait([&](const boost::system::error_code&, int) { acceptor.close(); });
+	boost::asio::ssl::context ctx{boost::asio::ssl::context::tlsv13_client};
+	auto native_context = ctx.native_handle();
+	SSL_CTX_set_options(native_context, SSL_OP_NO_TICKET);
 	async_simple::coro::syncAwait([&]() -> async_simple::coro::Lazy<void> {
 		while (true) {
 			auto& context = pool.getIoContext();
@@ -219,7 +253,7 @@ int main(int argc, char** argv) {
 				continue;
 			}
 			auto executor = std::make_shared<AsioExecutor>(context);
-			start_session(std::move(socket_ptr), executor, cfg.value()).via(executor.get()).detach();
+			start_session(std::move(socket_ptr), executor, cfg.value(), ctx).via(executor.get()).detach();
 		}
 	}());
 	pool.stop();

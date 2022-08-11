@@ -3,6 +3,9 @@ endpoint: "0.0.0.0:8855"
 ssl:
   crt: "tls.crt"
   key: "tls.key"
+  reuse_session: true
+  session_ticket: false
+  session_timeout: 600
 threads: 4
 auth:
   path: "/chat"
@@ -15,3 +18,8 @@ forward_port: "5555"
 default_action: { href_url: "www.google.com" }
 
 log_level: "debug" #trace, debug, info, warn, err, critical, off
+tcp:
+  no_delay: false
+  keep_alive: true
+  fastopen: true
+  qlen: 50
