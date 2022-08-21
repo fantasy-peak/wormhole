@@ -259,8 +259,13 @@ async_simple::coro::Lazy<void> start_session(std::shared_ptr<AsioExecutor> ex, s
 	std::string path{request.target()};
 	if (!boost::beast::websocket::is_upgrade(request) || path != cfg.auth.path) {
 		std::stringstream ss;
-		ss << boost::beast::get_lowest_layer(stream).socket().remote_endpoint();
-		SPDLOG_INFO("remote_endpoint: [{}], is_upgrade: [{}], path: [{}]", ss.str(), boost::beast::websocket::is_upgrade(request), path.data());
+		boost::beast::error_code ec{};
+		boost::asio::ip::tcp::endpoint endpoint = boost::beast::get_lowest_layer(stream).socket().remote_endpoint(ec);
+		if (!ec) {
+			std::stringstream ss;
+			ss << endpoint;
+			SPDLOG_INFO("remote_endpoint: [{}], is_upgrade: [{}], path: [{}]", ss.str(), boost::beast::websocket::is_upgrade(request), path.data());
+		}
 		boost::beast::http::response<boost::beast::http::string_body> res{boost::beast::http::status::moved_permanently, request.version()};
 		res.set(boost::beast::http::field::server, BOOST_BEAST_VERSION_STRING);
 		if (cfg.default_action.html_path) {
