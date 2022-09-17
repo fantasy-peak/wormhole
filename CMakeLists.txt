@@ -38,9 +38,9 @@ xrepo_package("yaml_cpp_struct main" DEPS "magic_enum" "visit_struct" "yaml-cpp"
 include_directories(include)
 add_executable(wormhole_client src/wormhole_client.cpp)
 xrepo_target_packages(wormhole_client PUBLIC yaml_cpp_struct openssl boost fmt spdlog async_simple NO_LINK_LIBRARIES)
-target_link_libraries(wormhole_client PUBLIC yaml-cpp async_simple fmt -pthread dl ssl crypto aio boost_program_options-mt)
+target_link_libraries(wormhole_client PUBLIC yaml-cpp async_simple fmt -pthread dl ssl crypto boost_program_options-mt)
 
 add_executable(wormhole_server src/wormhole_server.cpp)
 xrepo_target_packages(wormhole_server PUBLIC yaml_cpp_struct openssl boost fmt spdlog async_simple NO_LINK_LIBRARIES)
-target_link_libraries(wormhole_server PUBLIC yaml-cpp async_simple fmt -pthread dl ssl crypto aio boost_program_options-mt)
+target_link_libraries(wormhole_server PUBLIC yaml-cpp async_simple fmt -pthread dl ssl crypto boost_program_options-mt)
 

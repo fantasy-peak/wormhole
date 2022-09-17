@@ -1,4 +1,5 @@
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG
+#define ASYNC_SIMPLE_HAS_NOT_AIO
 
 #include <filesystem>
 #include <fstream>
