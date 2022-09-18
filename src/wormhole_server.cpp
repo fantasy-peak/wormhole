@@ -377,7 +377,7 @@ int main(int argc, char** argv) {
 	boost::system::error_code ec;
 	if (cfg.tcp.fastopen) {
 		acceptor.set_option(boost::asio::detail::socket_option::integer<IPPROTO_TCP, TCP_FASTOPEN>(cfg.tcp.qlen), ec);
-		spdlog::info("start fastopen: {}", ec.message());
+		SPDLOG_INFO("start fastopen {}", ec.message());
 	}
 	acceptor.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 	acceptor.bind(endpoint);
