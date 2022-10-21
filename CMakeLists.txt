@@ -17,15 +17,18 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/xrepo.cmake")
 endif()
 
 set(XREPO_PACKAGE_VERBOSE ON)
-set(XREPO_BOOTSTRAP_XMAKE OFF)
+set(XREPO_BOOTSTRAP_XMAKE ON)
 set(XREPO_BUILD_PARALLEL_JOBS 12)
-set(XMAKE_RELEASE_LATEST v2.6.8)
+set(XMAKE_RELEASE_LATEST v2.7.1)
 
 include(${CMAKE_BINARY_DIR}/xrepo.cmake)
-
 if(NOT EXISTS "$ENV{HOME}/.xmake/repositories/my_private_repo/xmake.lua")
-    message(STATUS "add my_private_repo https://github.com/fantasy-peak/xmake-repo.git")
-    execute_process(COMMAND xmake repo -a -g my_private_repo https://github.com/fantasy-peak/xmake-repo.git)
+    message(STATUS "add my_private_repo")
+    if(EXISTS ${CMAKE_BINARY_DIR}/xmake/install/bin/xmake)
+        execute_process(COMMAND ${CMAKE_BINARY_DIR}/xmake/install/bin/xmake repo -a -g my_private_repo https://github.com/fantasy-peak/xmake-repo.git)
+    else()
+        execute_process(COMMAND xmake repo -a -g my_private_repo https://github.com/fantasy-peak/xmake-repo.git)
+    endif()
 endif()
 #----------------------------------------------------------------------------------
 xrepo_package("openssl")
@@ -37,10 +40,10 @@ xrepo_package("yaml_cpp_struct main" DEPS "magic_enum" "visit_struct" "yaml-cpp"
 #-----------------------------------------------------------------------------------
 include_directories(include)
 add_executable(wormhole_client src/wormhole_client.cpp)
-xrepo_target_packages(wormhole_client PUBLIC yaml_cpp_struct openssl boost fmt spdlog async_simple NO_LINK_LIBRARIES)
+xrepo_target_packages(wormhole_client NO_LINK_LIBRARIES PUBLIC yaml_cpp_struct openssl boost fmt spdlog async_simple)
 target_link_libraries(wormhole_client PUBLIC yaml-cpp async_simple fmt -pthread dl ssl crypto boost_program_options-mt)
 
 add_executable(wormhole_server src/wormhole_server.cpp)
-xrepo_target_packages(wormhole_server PUBLIC yaml_cpp_struct openssl boost fmt spdlog async_simple NO_LINK_LIBRARIES)
+xrepo_target_packages(wormhole_server NO_LINK_LIBRARIES PUBLIC yaml_cpp_struct openssl boost fmt spdlog async_simple)
 target_link_libraries(wormhole_server PUBLIC yaml-cpp async_simple fmt -pthread dl ssl crypto boost_program_options-mt)
 
