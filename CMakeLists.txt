@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.23.0)
 
 project(wormhole)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(OPTFLAGS -gdwarf-2 -O3)
 set(CMAKE_CXX_FLAGS "-fcoroutines")
 set(WARNINGS -Wall -Wextra -Wno-missing-field-initializers -Wno-ignored-qualifiers)
@@ -19,7 +19,7 @@ endif()
 set(XREPO_PACKAGE_VERBOSE ON)
 set(XREPO_BOOTSTRAP_XMAKE ON)
 set(XREPO_BUILD_PARALLEL_JOBS 12)
-set(XMAKE_RELEASE_LATEST v2.7.1)
+set(XMAKE_RELEASE_LATEST v2.7.2)
 
 include(${CMAKE_BINARY_DIR}/xrepo.cmake)
 if(NOT EXISTS "$ENV{HOME}/.xmake/repositories/my_private_repo/xmake.lua")
