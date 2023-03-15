@@ -22,13 +22,9 @@ set(XREPO_BUILD_PARALLEL_JOBS 12)
 set(XMAKE_RELEASE_LATEST v2.7.5)
 
 include(${CMAKE_BINARY_DIR}/xrepo.cmake)
-if(NOT EXISTS "$ENV{HOME}/.xmake/repositories/my_private_repo/xmake.lua")
+if(NOT EXISTS "$ENV{HOME}/.xmake/repositories/my_private_repo")
     message(STATUS "add my_private_repo")
-    if(EXISTS ${CMAKE_BINARY_DIR}/xmake/install/bin/xmake)
-        execute_process(COMMAND ${CMAKE_BINARY_DIR}/xmake/install/bin/xmake repo -a -g my_private_repo https://github.com/fantasy-peak/xmake-repo.git)
-    else()
-        execute_process(COMMAND xmake repo -a -g my_private_repo https://github.com/fantasy-peak/xmake-repo.git)
-    endif()
+    execute_process(COMMAND xmake repo -a -g my_private_repo https://github.com/fantasy-peak/xmake-repo.git)
 endif()
 #----------------------------------------------------------------------------------
 xrepo_package("openssl")
@@ -46,4 +42,3 @@ target_link_libraries(wormhole_client PUBLIC yaml-cpp async_simple fmt -pthread 
 add_executable(wormhole_server src/wormhole_server.cpp)
 xrepo_target_packages(wormhole_server NO_LINK_LIBRARIES PUBLIC yaml_cpp_struct openssl boost fmt spdlog async_simple)
 target_link_libraries(wormhole_server PUBLIC yaml-cpp async_simple fmt -pthread dl ssl crypto boost_program_options-mt)
-
