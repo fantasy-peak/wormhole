@@ -10,9 +10,6 @@
 #include <async_simple/coro/SyncAwait.h>
 #include <async_simple/executors/SimpleExecutor.h>
 #include <boost/asio.hpp>
-#include <boost/asio/buffer.hpp>
-#include <boost/asio/buffers_iterator.hpp>
-#include <boost/asio/ssl/context.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>

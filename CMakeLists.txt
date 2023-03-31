@@ -19,7 +19,7 @@ endif()
 set(XREPO_PACKAGE_VERBOSE ON)
 set(XREPO_BOOTSTRAP_XMAKE ON)
 set(XREPO_BUILD_PARALLEL_JOBS 12)
-set(XMAKE_RELEASE_LATEST v2.7.5)
+set(XMAKE_RELEASE_LATEST v2.7.7)
 
 include(${CMAKE_BINARY_DIR}/xrepo.cmake)
 if(NOT EXISTS "$ENV{HOME}/.xmake/repositories/my_private_repo")
