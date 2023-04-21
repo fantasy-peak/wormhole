@@ -206,6 +206,13 @@ async_simple::coro::Lazy<void> forward_request_to_ws_svr(std::shared_ptr<SslWebs
 	}
 	SPDLOG_DEBUG("resolver_results size: [{}]", resolver_results.size());
 	WebsocketStream ws_{ex->m_io_context};
+	ws_.write_buffer_bytes(8192);
+	ws_.control_callback([](boost::beast::websocket::frame_type /* kind */, std::string_view /* payload */) {
+		// if (kind == boost::beast::websocket::frame_type::pong)
+		// 	SPDLOG_DEBUG("recv pong");
+		// else if (kind == boost::beast::websocket::frame_type::ping)
+		// 	SPDLOG_DEBUG("recv ping");
+	});
 	boost::system::error_code ec;
 	boost::beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
 	auto [con_ec, ep] = co_await async_connect(ex->m_io_context, ws_, resolver_results);
