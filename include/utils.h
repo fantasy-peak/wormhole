@@ -60,15 +60,34 @@ inline boost::asio::io_context& IoContextPool::getIoContext() {
 	return io_context;
 }
 
+namespace detail {
+
+template <typename C>
+struct to_helper {};
+
+template <typename Container, std::ranges::range R>
+	requires std::convertible_to<std::ranges::range_value_t<R>, typename Container::value_type>
+Container operator|(R&& r, to_helper<Container>) {
+	return Container{r.begin(), r.end()};
+}
+
+} // namespace detail
+
+template <std::ranges::range Container>
+	requires(!std::ranges::view<Container>)
+inline auto to() {
+	return detail::to_helper<Container>{};
+}
+
 inline std::tuple<std::string, std::string> split(const std::string& endpoint) {
-	auto to_vector = [](auto&& r) {
-		auto r_common = r | std::views::common;
-		return std::vector(r_common.begin(), r_common.end());
-	};
-	auto ip_port = to_vector(endpoint | std::views::split(':') | std::views::transform([](auto&& rng) {
-		return std::string_view(&*rng.begin(), std::ranges::distance(rng.begin(), rng.end()));
-	}));
-	return std::make_tuple(std::string{ip_port.at(0)}, std::string{ip_port.at(1)});
+	auto ip_port =
+		endpoint |
+		std::views::split(':') |
+		std::views::transform([](auto&& rng) {
+			return std::string(&*rng.begin(), std::ranges::distance(rng.begin(), rng.end()));
+		}) |
+		to<std::vector<std::string>>();
+	return std::make_tuple(std::move(ip_port.at(0)), std::move(ip_port.at(1)));
 }
 
 class AsioExecutor : public async_simple::Executor {
@@ -86,7 +105,8 @@ public:
 };
 
 template <typename T>
-requires(!std::is_reference<T>::value) struct AsioCallbackAwaiter {
+	requires(!std::is_reference<T>::value)
+struct AsioCallbackAwaiter {
 public:
 	using CallbackFunction =
 		std::function<void(std::coroutine_handle<>, std::function<void(T)>)>;
@@ -124,7 +144,8 @@ inline async_simple::coro::Lazy<boost::system::error_code> async_accept(
 
 template <typename Socket, typename AsioBuffer>
 inline async_simple::coro::Lazy<std::pair<boost::system::error_code, size_t>> async_read_some(Socket& socket, AsioBuffer&& buffer) noexcept
-	requires std::is_rvalue_reference<decltype(buffer)>::value {
+	requires std::is_rvalue_reference<decltype(buffer)>::value
+{
 	co_return co_await AsioCallbackAwaiter<std::pair<boost::system::error_code, size_t>>{
 		[&](std::coroutine_handle<> handle, auto set_resume_value) mutable {
 			socket.async_read_some(std::move(buffer),
@@ -138,7 +159,8 @@ inline async_simple::coro::Lazy<std::pair<boost::system::error_code, size_t>> as
 
 template <typename Socket, typename AsioBuffer>
 inline async_simple::coro::Lazy<std::pair<boost::system::error_code, size_t>> async_write(Socket& socket, AsioBuffer&& buffer) noexcept
-	requires std::is_rvalue_reference<decltype(buffer)>::value {
+	requires std::is_rvalue_reference<decltype(buffer)>::value
+{
 	co_return co_await AsioCallbackAwaiter<std::pair<boost::system::error_code, size_t>>{
 		[&](std::coroutine_handle<> handle, auto set_resume_value) mutable {
 			auto func = [set_resume_value, handle](auto ec, auto size) mutable {
@@ -224,7 +246,8 @@ inline async_simple::coro::Lazy<std::tuple<boost::system::error_code, boost::asi
 
 template <typename Socket, typename AsioBuffer>
 inline async_simple::coro::Lazy<std::pair<boost::system::error_code, size_t>> async_write_ws(Socket& socket, AsioBuffer&& buffer) noexcept
-	requires std::is_rvalue_reference<decltype(buffer)>::value {
+	requires std::is_rvalue_reference<decltype(buffer)>::value
+{
 	co_return co_await AsioCallbackAwaiter<std::pair<boost::system::error_code, size_t>>{[&](std::coroutine_handle<> handle, auto set_resume_value) mutable {
 		socket.async_write(std::move(buffer), [set_resume_value = std::move(set_resume_value), handle](boost::beast::error_code ec, std::size_t size) {
 			set_resume_value(std::make_pair(std::move(ec), size));
