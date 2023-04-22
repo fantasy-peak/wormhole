@@ -32,7 +32,7 @@ xrepo_package("boost" CONFIGS "all = true")
 xrepo_package("async_simple main")
 xrepo_package("fmt")
 xrepo_package("spdlog")
-xrepo_package("yaml_cpp_struct v1.0.0" DEPS "magic_enum" "visit_struct" "yaml-cpp")
+xrepo_package("yaml_cpp_struct" DEPS "magic_enum" "visit_struct" "yaml-cpp")
 #-----------------------------------------------------------------------------------
 include_directories(include)
 add_executable(wormhole_client src/wormhole_client.cpp)
