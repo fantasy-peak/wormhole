@@ -8,7 +8,7 @@
 
 #include <async_simple/coro/Lazy.h>
 #include <async_simple/coro/SyncAwait.h>
-#include <async_simple/executors/SimpleExecutor.h>
+#include <async_simple/Executor.h>
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
